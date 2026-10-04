@@ -80,7 +80,7 @@ curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" \
 The second one comes back `"status": "blocked"` with the actual reason
 attached.
 
-## Validated against real fraud data, and a real limitation found
+## What happens when you point these rules at real transactions
 
 The rules above were only ever checked against hand-written test cases
 until now. `docs/fraud-benchmark.md` checks them against real data and
