@@ -80,13 +80,47 @@ curl -X POST http://localhost:8000/orders -H "Content-Type: application/json" \
 The second one comes back `"status": "blocked"` with the actual reason
 attached.
 
+## Validated against real fraud data, and a real limitation found
+
+The rules above were only ever checked against hand-written test cases
+until now. `docs/fraud-benchmark.md` checks them against real data and
+finds a genuine gap: both rules depend on repeat-customer order history,
+and two real-world-standard fraud datasets (a real-labeled e-commerce
+signup dataset, and PaySim, the standard mobile-money fraud simulator)
+were checked and neither has meaningful repeat-customer structure (PaySim:
+9,298 of 6,353,307 accounts have more than one transaction; the other
+dataset has exactly one transaction per user, period). Replaying the
+price-outlier rule on PaySim's real-money repeat accounts (through the
+actual `/assess` endpoint, not a reimplementation) confirms the result
+that implies: 0 of 18 real fraud cases caught, because the rule requires
+3 prior orders and no account in that real subset has that many.
+
+A transaction-level model trained on real PaySim data, using signals that
+don't require any customer history, reaches 99.85% ROC-AUC / 91.1% PR-AUC
+(90% precision at 80% recall) on a temporally held-out test set, after
+catching and discarding a feature that was inflating an earlier run to a
+suspicious 1.0 AUC (diagnosed as a known PaySim simulation artifact, not
+a real signal). It's a transaction-level benchmark, not an "Amazon-level
+fraud model" claim, and it's deliberately not wired into the live
+`/assess` endpoint, since PaySim's schema (money transfers) and this
+service's own schema (e-commerce orders) are genuinely different domains.
+Full methodology, the artifact diagnosis, and what real deployment would
+actually require: [`docs/fraud-benchmark.md`](docs/fraud-benchmark.md).
+
+```bash
+pip install -r requirements.txt -r fraud_benchmark/requirements.txt
+python -m fraud_benchmark.evaluate_rules_on_real_data
+python -m fraud_benchmark.run_ml_benchmark
+```
+
 ## Tests
 
 ```bash
 pytest tests/ -v
 ```
 
-12 tests: health checks, order creation and retrieval, 404 handling,
-input validation, and the fraud logic itself. First-time customers
-aren't flagged with no history, a real price outlier gets flagged, and a
-burst of orders in a short window trips the velocity check.
+18 tests: health checks, order creation and retrieval, 404 handling,
+input validation, the fraud logic itself, and the real-data benchmark's
+feature engineering and temporal split. First-time customers aren't
+flagged with no history, a real price outlier gets flagged, and a burst
+of orders in a short window trips the velocity check.
